@@ -1,3 +1,9 @@
+// SimpleQueue Playground
+//
+// Copyright (C) 2021 Dan Rodrigues <danrr.gh.oss@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 import Foundation
 
 /// This playground serves as a scratchpad for implementing a very minimal equivalent of `DispatchQueue`

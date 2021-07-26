@@ -103,10 +103,10 @@ final class SimpleQueue {
     private struct WorkerContext {
 
         let thread: Thread
-        let runner: Worker
+        let worker: Worker
     }
 
-    private var workers = [WorkerContext]()
+    private var contexts = [WorkerContext]()
 
     /// Initializes a queue with a fixed number of worker threads
     ///
@@ -116,12 +116,12 @@ final class SimpleQueue {
     init(workerCount: Int = 3) {
         precondition(workerCount > 0)
 
-        workers = (0..<workerCount).map { _ in
+        contexts = (0..<workerCount).map { _ in
             let worker = Worker()
             let thread = Thread(target: worker, selector: #selector(Worker.loop), object: nil)
             thread.start()
 
-            return WorkerContext(thread: thread, runner: worker)
+            return WorkerContext(thread: thread, worker: worker)
         }
     }
 
@@ -170,8 +170,8 @@ final class SimpleQueue {
 
     private func workerToScheduleOn() -> Worker {
         // The force-unwrap is assumed safe based on the precondition() in the initializer
-        return workers
-            .map { $0.runner }
+        return contexts
+            .map { $0.worker }
             .sorted { $0.estimatedLoad < $1.estimatedLoad }
             .first!
     }
@@ -179,42 +179,37 @@ final class SimpleQueue {
 
 // TODO: some quick tests, cleanup
 
-let isSerial = false
-let workerCount = isSerial ? 1 : 3
-let queue = SimpleQueue(workerCount: workerCount)
+let concurrentQueue = SimpleQueue(workerCount: 3)
+let serialQueue = SimpleQueue(workerCount: 1)
 
-queue.async {
-    print("task 1")
+serialQueue.async {
+    print("sq: task 1")
 }
 
-queue.async {
-    print("task 2")
+serialQueue.async {
+    print("sq: task 2")
 
-    queue.async {
-        print("nested after 2")
+    serialQueue.async {
+        print("sq: nested within 2")
     }
 }
 
-queue.async {
-    print("task 3")
-
-    // This is expected to deadlock if there is only 1 worker thread (serial)
-    // It will function if there are 2 or more threads (concurrent)
-    guard !isSerial else { return }
+concurrentQueue.async {
+    print("cq: task 1")
 
     print("before sync")
-    let nestedSyncResult = queue.sync {
-        return "nested result"
+    let nestedSyncResult = serialQueue.sync {
+        return "sq: nested result"
     }
     print("after sync: \(nestedSyncResult)")
 }
 
-let result: String = queue.sync {
-    queue.async {
-        print("async within sync")
+let result: String = concurrentQueue.sync {
+    serialQueue.async {
+        print("sq: async within sync")
     }
 
-    return "thread sync 1"
+    return "cq: thread sync 1"
 }
 
 print("sync result: \(result)")

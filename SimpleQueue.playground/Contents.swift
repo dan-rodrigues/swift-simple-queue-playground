@@ -147,19 +147,22 @@ final class SimpleQueue {
 
     @discardableResult
     func sync<Result>(_ work: @escaping () -> Result) -> Result {
-        let condition = NSConditionLock(condition: 0)
+        let waitingCondition = 0
+        let completedCondition = 1
+
+        let conditionLock = NSConditionLock(condition: waitingCondition)
         var result: Result?
 
         let workItem = Worker.WorkItem(work: work) { workResult in
-            condition.lock()
+            conditionLock.lock()
             result = workResult
-            condition.unlock(withCondition: 1)
+            conditionLock.unlock(withCondition: completedCondition)
         }
 
         workerToScheduleOn().schedule(workItem)
 
-        condition.lock(whenCondition: 1)
-        defer { condition.unlock() }
+        conditionLock.lock(whenCondition: completedCondition)
+        defer { conditionLock.unlock() }
 
         // Assumed to not be nil based on above locking
         return result!
@@ -169,13 +172,14 @@ final class SimpleQueue {
         // The force-unwrap is assumed safe based on the precondition() in the initializer
         return workers
             .map { $0.runner }
-            .sorted { $0.estimatedLoad < $1.estimatedLoad }.first!
+            .sorted { $0.estimatedLoad < $1.estimatedLoad }
+            .first!
     }
 }
 
 // TODO: some quick tests, cleanup
 
-let isSerial = true
+let isSerial = false
 let workerCount = isSerial ? 1 : 3
 let queue = SimpleQueue(workerCount: workerCount)
 

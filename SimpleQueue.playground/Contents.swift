@@ -159,7 +159,7 @@ final class SimpleQueue {
         workerToScheduleOn().schedule(workItem)
 
         condition.lock(whenCondition: 1)
-        condition.unlock(withCondition: 0)
+        defer { condition.unlock() }
 
         // Assumed to not be nil based on above locking
         return result!
@@ -175,7 +175,9 @@ final class SimpleQueue {
 
 // TODO: some quick tests, cleanup
 
-let queue = SimpleQueue()
+let isSerial = true
+let workerCount = isSerial ? 1 : 3
+let queue = SimpleQueue(workerCount: workerCount)
 
 queue.async {
     print("task 1")
@@ -194,6 +196,7 @@ queue.async {
 
     // This is expected to deadlock if there is only 1 worker thread (serial)
     // It will function if there are 2 or more threads (concurrent)
+    guard !isSerial else { return }
 
     print("before sync")
     let nestedSyncResult = queue.sync {
@@ -209,3 +212,5 @@ let result: String = queue.sync {
 
     return "thread sync 1"
 }
+
+print("sync result: \(result)")

@@ -20,7 +20,7 @@ final class Worker {
         typealias Work = () -> Result
         typealias Completion = (Result) -> Void
 
-        private let work: Work
+        private var work: Work?
         private let completion: ((Result) -> Void)?
 
         init(work: @escaping Work, completion: Completion? = nil) {
@@ -29,7 +29,23 @@ final class Worker {
         }
 
         func execute() {
-            let result = work()
+            let result: Result
+            if let workToExecute = work {
+                // The work closure reference must be set to nil to ensure the no-escape condition is met when completion is called
+                // withoutActuallyEscaping() enforces this and commenting out the nil-assignment will cause exceptions
+                //
+                // Also note that workToExecute wasn't created using a guard statement
+                // That would keep the work closure live until this function returns, which will lead to the same exception
+                result = workToExecute()
+                work = nil
+            } else {
+                // Since work is set to nil after execution, it should only be run once
+                // This is a showstopper implementation bug and considered a fatal error
+                preconditionFailure("execute() on WorkItem was called more than once")
+            }
+
+            // At this point, work will have been set to nil (to avoid the mentioend escaping-exceptions)
+            // We can now call the completion handler safely
             completion?(result)
         }
     }
@@ -146,26 +162,33 @@ final class SimpleQueue {
     ///   - work: The work to perform.
 
     @discardableResult
-    func sync<Result>(_ work: @escaping () -> Result) -> Result {
+    func sync<Result>(_ work: () -> Result) -> Result {
         let waitingCondition = 0
         let completedCondition = 1
 
         let conditionLock = NSConditionLock(condition: waitingCondition)
-        var result: Result?
 
-        let workItem = Worker.WorkItem(work: work) { workResult in
-            conditionLock.lock()
-            result = workResult
-            conditionLock.unlock(withCondition: completedCondition)
+        // Since the work closure doesn't escape in practice, we can use withoutActuallyEscaping() here
+        // The WorkItem struct does store the closure and therefore escapes it, but it won't outlive this function call
+        // We need to ensure escapableWork doesn't escape or an exception will be thrown
+
+        return withoutActuallyEscaping(work) { escapableWork in
+            var result: Result?
+
+            let workItem = Worker.WorkItem(work: escapableWork) { workResult in
+                conditionLock.lock()
+                result = workResult
+                conditionLock.unlock(withCondition: completedCondition)
+            }
+
+            workerToScheduleOn().schedule(workItem)
+
+            conditionLock.lock(whenCondition: completedCondition)
+            defer { conditionLock.unlock() }
+
+            // Assumed to not be nil based on above locking
+            return result!
         }
-
-        workerToScheduleOn().schedule(workItem)
-
-        conditionLock.lock(whenCondition: completedCondition)
-        defer { conditionLock.unlock() }
-
-        // Assumed to not be nil based on above locking
-        return result!
     }
 
     private func workerToScheduleOn() -> Worker {
@@ -198,7 +221,8 @@ concurrentQueue.async {
     print("cq: task 1")
 
     print("before sync")
-    let nestedSyncResult = serialQueue.sync {
+    let nestedSyncResult: String = serialQueue.sync {
+        print("within sync")
         return "sq: nested result"
     }
     print("after sync: \(nestedSyncResult)")

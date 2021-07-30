@@ -44,7 +44,7 @@ final class Worker {
                 preconditionFailure("execute() on WorkItem was called more than once")
             }
 
-            // At this point, work will have been set to nil (to avoid the mentioend escaping-exceptions)
+            // At this point, work will have been set to nil (to avoid the mentioned escaping-exceptions)
             // We can now call the completion handler safely
             completion?(result)
         }

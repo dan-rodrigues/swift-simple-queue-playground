@@ -8,7 +8,9 @@ This is a Swift 5.0 playground that serves as a scratchpad for implementing a mi
 
 ## API
 
-The implementation is called `SimpleQueue` and is modelled after `DispatchQueue`. Since this is a minimal demo project, most of the functionality `DispatchQueue` offers beyond `async()` / `sync()` isn't provided. The equivalent of a concurrent queue is configured by configuring `SimpleQueue` with a `workerCount` greater than 1. The "unchecked `rethrows`" trick used by `DispatchQueue` to circumvent the compiler isn't used here, since it apparently exploits a compiler bug.
+The implementation is called `SimpleQueue` and is modelled after `DispatchQueue`. Since this is a minimal demo project, most of the functionality `DispatchQueue` offers beyond `async()` / `sync()` isn't provided. The equivalent of a concurrent queue is configured by configuring `SimpleQueue` with a `workerCount` greater than 1.
+
+The "unchecked `rethrows`" trick used by `DispatchQueue` to circumvent the compiler isn't used here, since it apparently exploits a compiler bug. [`withoutActuallyEscaping()`](https://developer.apple.com/documentation/swift/2827967-withoutactuallyescaping) is used to to implement `SimpleQueue.sync()`.
 
 ```swift
 final class SimpleQueue {
@@ -18,7 +20,7 @@ final class SimpleQueue {
     func async(_ work: @escaping () -> Void)
 
     @discardableResult
-    func sync<Result>(_ work: @escaping () -> Result) -> Result
+    func sync<Result>(_ work: () -> Result) -> Result
 }
 
 ```
